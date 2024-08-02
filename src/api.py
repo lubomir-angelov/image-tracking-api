@@ -6,14 +6,14 @@ from io import BytesIO
 from PIL import Image
 import asyncio
 
-from vector_index import add_to_index, search_index
+from vector_index import add_to_index, search_index, load_and_index_images, load_metadata
 from fast_segmentation import segment_objects, draw_boxes_and_metadata
 
 app = FastAPI()
 
 @app.post("/upload_video/")
 async def upload_video(file: UploadFile = File(...)):
-    video_stream = cv2.VideoCapture(file.file)
+    video_stream = cv2.VideoCapture(filename=file.filename, apiPreference=1)
     frame_queue = asyncio.Queue()
 
     async def process_video():
@@ -57,4 +57,6 @@ async def add_image(file: UploadFile = File(...), metadata: dict = None):
 
 if __name__ == '__main__':
     import uvicorn
+    csv_metadata = load_metadata("src/img_index/bg_master_data.csv")
+    img_index_metadata = load_and_index_images(image_folder="src/img_index/smartcart_images", csv_metadata=csv_metadata)
     uvicorn.run(app, host='0.0.0.0', port=8000)
