@@ -2,5 +2,6 @@ segment-anything-fast-0.1.2
 fastapi==0.111.1
 uvicorn==0.30.3
 opencv-python-headless==4.10.0.84
+opencv-contrib-python==4.10.0.84
 ultralytics==8.0.122
 faiss-cpu==1.8.0
