@@ -111,27 +111,3 @@ class FastSegment:
         return self.everything_results[0].boxes.xyxy
 
 
-
-
-def segment_objects(frame):
-    model = FastSegment()
-    results = model.fastsam_model(
-            frame, device=model.device, retina_masks=True, imgsz=512, conf=0.8, iou=0.4
-        )
-    segmented_objects = []
-    for result in results:
-        # Assuming result contains bounding box info
-        x1, y1, x2, y2 = result['bbox']
-        segmented_object = frame[y1:y2, x1:x2]
-        segmented_objects.append((segmented_object, (x1, y1, x2, y2)))
-
-    return segmented_objects
-
-def draw_boxes_and_metadata(frame, objects_with_metadata):
-    for obj, bbox, metadata in objects_with_metadata:
-        x1, y1, x2, y2 = bbox
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        text = f"Metadata: {metadata}"
-        cv2.putText(frame, text, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    return frame
-

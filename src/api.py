@@ -12,15 +12,39 @@ import asyncio
 from typing import Tuple, List
 
 from vector_index import add_to_index, search_index, load_and_index_images, load_metadata
-from fast_segmentation import segment_objects, draw_boxes_and_metadata
+from fast_segmentation import FastSegment
 
 app = FastAPI()
+model = FastSegment()
 
+
+def segment_objects(frame):
+
+    masks = model.get_masks(image=frame)
+    boxes = model.get_boxes()
+    if boxes is not None:
+        for box, cls in zip(boxes, masks):
+
+            #image.convert("RGB")
+            img = frame[int(box[1]) : int(box[3]), int(box[0]) : int(box[2])]
+
+    segmented_objects = zip(results, boxes)
+
+    return segmented_objects
+
+def draw_boxes_and_metadata(frame, objects_with_metadata):
+    for obj, bbox, metadata in objects_with_metadata:
+        x1, y1, x2, y2 = bbox
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        text = f"Metadata: {metadata}"
+        cv2.putText(frame, text, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    return frame
 
 async def process_video_stream(temp_name: str, result_queue: asyncio.Queue, frame_queue: asyncio.Queue):
+    # apiPreference 0 is FFMPEG!
     video_stream = cv2.VideoCapture(
         filename=temp_name,
-        apiPreference=1
+        apiPreference=0
     )
     frame_idx = 0
     results = []
@@ -29,16 +53,23 @@ async def process_video_stream(temp_name: str, result_queue: asyncio.Queue, fram
         ret, frame = video_stream.read()
         if not ret:
             break
-        segmented_objects = segment_objects(frame)
         frame_results = []
         objects_with_metadata = []
 
-        for bbox, obj in segmented_objects:
-            search_results = search_index(obj)
-            if search_results:
-                metadata = search_results[0]
-                objects_with_metadata.append((obj, bbox, metadata))
-                frame_results.append({"frame_index": frame_idx, "bbox": bbox, "metadata": metadata})
+        masks = model.get_masks(image=frame)
+        boxes = model.get_boxes()
+
+        if boxes is not None:
+            for box, cls in zip(boxes, masks):
+                bbox = [int(box[1]), int(box[3]), int(box[0]), int(box[2])]
+                #image.convert("RGB")
+                img = frame[int(box[1]) : int(box[3]), int(box[0]) : int(box[2])]
+                search_results = search_index(img)
+
+                if search_results:
+                    metadata = search_results[0]
+                    objects_with_metadata.append((img, bbox, metadata))
+                    frame_results.append({"frame_index": frame_idx, "bbox": bbox, "metadata": metadata})
 
         results.append(frame_results)
         frame_with_metadata = draw_boxes_and_metadata(frame, objects_with_metadata)
@@ -65,9 +96,10 @@ async def save_video(output_path, frame_queue, fps, frame_size):
 
 def get_fps_and_frame_size(video_file_path: str) -> Tuple[float, int]:
     # Read initial frame to get FPS and frame size
+    # apiPreference 0 is FFMPEG!
     video_stream = cv2.VideoCapture(
         filename=video_file_path,
-        apiPreference=1
+        apiPreference=0
     )
     fps = video_stream.get(cv2.CAP_PROP_FPS)
     frame_size = (int(video_stream.get(cv2.CAP_PROP_FRAME_WIDTH)), int(video_stream.get(cv2.CAP_PROP_FRAME_HEIGHT)))
