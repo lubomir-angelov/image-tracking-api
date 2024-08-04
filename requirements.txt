@@ -6,3 +6,4 @@ ultralytics==8.0.122
 faiss-cpu==1.8.0
 datasets==2.20.0
 transformers==4.35.0
+accelerate==0.33.0

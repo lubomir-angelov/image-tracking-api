@@ -11,26 +11,13 @@ from PIL import Image
 import asyncio
 from typing import Tuple, List
 
+from similarity_search import Similarity
 from vector_index import add_to_index, search_index, load_and_index_images, load_metadata
 from fast_segmentation import FastSegment
 
 app = FastAPI()
 model = FastSegment()
 
-
-def segment_objects(frame):
-
-    masks = model.get_masks(image=frame)
-    boxes = model.get_boxes()
-    if boxes is not None:
-        for box, cls in zip(boxes, masks):
-
-            #image.convert("RGB")
-            img = frame[int(box[1]) : int(box[3]), int(box[0]) : int(box[2])]
-
-    segmented_objects = zip(results, boxes)
-
-    return segmented_objects
 
 def draw_boxes_and_metadata(frame, objects_with_metadata):
     for obj, bbox, metadata in objects_with_metadata:
@@ -64,12 +51,13 @@ async def process_video_stream(temp_name: str, result_queue: asyncio.Queue, fram
                 bbox = [int(box[1]), int(box[3]), int(box[0]), int(box[2])]
                 #image.convert("RGB")
                 img = frame[int(box[1]) : int(box[3]), int(box[0]) : int(box[2])]
-                search_results = search_index(img)
+                scores, search_results = sim.get_neighbors(img)
+                #search_results = search_index(img)
 
                 if search_results:
-                    metadata = search_results[0]
+                    metadata = search_results["additional_info"]
                     objects_with_metadata.append((img, bbox, metadata))
-                    frame_results.append({"frame_index": frame_idx, "bbox": bbox, "metadata": metadata})
+                    frame_results.append({"frame_index": frame_idx, "bbox": bbox, "metadata": metadata, "score": scores})
 
         results.append(frame_results)
         frame_with_metadata = draw_boxes_and_metadata(frame, objects_with_metadata)
@@ -157,4 +145,5 @@ if __name__ == '__main__':
     import uvicorn
     csv_metadata = load_metadata("src/img_index/bg_master_data.csv")
     img_index_metadata = load_and_index_images(image_folder="src/img_index/smartcart_images", csv_metadata=csv_metadata)
+    sim = Similarity(external_metadata=img_index_metadata)
     uvicorn.run(app, host='0.0.0.0', port=9999)

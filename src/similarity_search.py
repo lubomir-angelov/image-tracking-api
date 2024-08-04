@@ -3,6 +3,7 @@ from transformers import AutoFeatureExtractor, AutoModel
 from datasets import load_dataset
 import torch
 from PIL import Image
+from typing import List
 
 logger = logging.getLogger("uvicorn")
 
@@ -21,7 +22,8 @@ class Similarity:
                         labels:[1, 1, 2], embeddings:[[0.921], [0.321], ...]}
     """
 
-    def __init__(self):
+    def __init__(self, external_metadata: List):
+        self.external_metadata = external_metadata
         self.extractor = AutoFeatureExtractor.from_pretrained(
             "models/vit_base_224_21k",
             
@@ -33,12 +35,13 @@ class Similarity:
         # move model to gpu
         self.model = self.model.to(self.device)
         self.dataset = load_dataset(
-            "imagefolder", data_dir=settings.images_database, drop_labels=False
+            "imagefolder", data_dir="src/img_index/smartcart_images", drop_labels=False
         )
         # move the dataset to cuda
         # https://stackoverflow.com/questions/59013109/runtimeerror-input-type-torch-floattensor-and-weight-type-torch-cuda-floatte
         #self.dataset.to("cuda:0")
         self.dataset_with_embeddings = self.add_emb_faiss_index()
+        
         
 
     def extract_embeddings(self, image):
@@ -55,7 +58,7 @@ class Similarity:
 
         return features.squeeze()
 
-    def get_neighbors(self, query_image, top_k=settings.similarity_top_k):
+    def get_neighbors(self, query_image, top_k=1):
         """
         :param query_image: <PIL.JpegImagePlugin.JpegImageFile image mode=RGB size=500x500 at 0x14FE9BCA0>
         :param top_k:
@@ -78,14 +81,19 @@ class Similarity:
     def add_emb_faiss_index(self):
         # TODO: decide if folder enhancement is necessary
         dataset_with_embeddings = self.dataset.map(
-            lambda example: {
+            lambda example, idx: {
                 "embeddings": self.extract_embeddings(example["image"]),
-                "folder": extract_folder_name(example["image"]),
-            }
+                "image_path": self.external_metadata[idx]["image_path"],
+                "additional_info": self.external_metadata[idx]["additional_info"],
+            },
+            with_indices=True
         )
 
         if self.device == "cuda":
-            dataset_with_embeddings["train"].add_faiss_index(column="embeddings", device=0)
+            # device (`Union[int, List[int]]`, *optional*):
+            # If positive integer, this is the index of the GPU to use. If negative integer, use all GPUs.
+            # If a list of positive integers is passed in, run only on those GPUs. By default it uses the CPU.
+            dataset_with_embeddings["train"].add_faiss_index(column="embeddings", device=-1)
         else:
             dataset_with_embeddings["train"].add_faiss_index(column="embeddings")
 
