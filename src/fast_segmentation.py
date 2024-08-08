@@ -1,3 +1,4 @@
+import datetime
 from fastsam import FastSAM, FastSAMPrompt
 import numpy as np
 import torch
@@ -58,8 +59,8 @@ class FastSegment:
         self.results = self.prompt_process.results[0]
         # save detections to file
         annotations = self.prompt_process.everything_prompt()
-        self.prompt_process.plot(annotations=annotations, output_path="annotated_image.jpg")
-
+        self.prompt_process.plot(annotations=annotations, output_path=f"output_images/{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}_annotated_image.jpg")
+        
         if self.device == "cuda":
             masks = self.results.boxes.cls.cuda().tolist()
         else:

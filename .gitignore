@@ -3,6 +3,10 @@ src/img_index/
 models/
 *.jpg
 *.png
+output/
+output_images/
+*.mp4
+*.avi
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,8 +1,9 @@
 from fastapi import BackgroundTasks, FastAPI, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.concurrency import run_in_threadpool
 from tempfile import NamedTemporaryFile
 import aiofiles
+import glob
 import os
 import cv2
 import numpy as np
@@ -10,14 +11,21 @@ from io import BytesIO
 from PIL import Image
 import asyncio
 from typing import Tuple, List
+import uvicorn
 
 from similarity_search import Similarity
-from vector_index import add_to_index, search_index, load_and_index_images, load_metadata
+from vector_index import load_and_index_images, load_metadata
 from fast_segmentation import FastSegment
 
-app = FastAPI()
 model = FastSegment()
 
+def create_application() -> FastAPI:
+    application = FastAPI()
+
+    return application
+
+
+app = create_application()
 
 def draw_boxes_and_metadata(frame, objects_with_metadata):
     for obj, bbox, metadata in objects_with_metadata:
@@ -26,6 +34,12 @@ def draw_boxes_and_metadata(frame, objects_with_metadata):
         text = f"Metadata: {metadata}"
         cv2.putText(frame, text, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
     return frame
+
+def segment_image(image):
+    masks = model.get_masks(image=image)
+    boxes = model.get_boxes()
+
+    return masks, boxes
 
 async def process_video_stream(temp_name: str, result_queue: asyncio.Queue, frame_queue: asyncio.Queue):
     # apiPreference 0 is FFMPEG!
@@ -43,8 +57,7 @@ async def process_video_stream(temp_name: str, result_queue: asyncio.Queue, fram
         frame_results = []
         objects_with_metadata = []
 
-        masks = model.get_masks(image=frame)
-        boxes = model.get_boxes()
+        masks, boxes = segment_image(image=frame)
 
         if boxes is not None:
             for box, cls in zip(boxes, masks):
@@ -134,16 +147,62 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
     return {"results": results}
 
 
+@app.post("/segment_image/")
+async def add_image(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    image = Image.open(BytesIO(await file.read()))
+    masks, boxes = segment_image(image=image)
+
+    # round up to 2 precison points
+    boxes = np.around(boxes,2).tolist()
+
+    response = {
+        "masks": masks,
+        "boxes": boxes
+    }
+
+    return boxes
+
+@app.get("/play_video")
+async def video_endpoint():
+    def iterfile():
+        with open("output/video.mp4", mode="rb") as file_like:
+            yield from file_like
+
+    return StreamingResponse(iterfile(), media_type="video/mp4")
+
+def cleanup_folder():
+    files = glob.glob('output_images/*')
+    for f in files:
+        os.remove(f)
+
+def write_video_from_images():
+    images = []
+    files = glob.glob('output_images/*')
+    if files:
+        for file in files:
+            img = Image.open(file)
+            images.append(cv2.imread(file))
+
+        video = cv2.VideoWriter('output/video.avi',-1,1,(img.width,img.height))
+
+        for image in images:
+            video.write(image)
+        
+    return
+
+
 @app.post("/add_image/")
 async def add_image(file: UploadFile = File(...), metadata: dict = None):
     image = Image.open(BytesIO(await file.read()))
-    add_to_index(image, metadata)
+    #add_to_index(image, metadata)
     return {"message": "Image added"}
 
 
-if __name__ == '__main__':
-    import uvicorn
+if __name__ == "__main__":
     csv_metadata = load_metadata("src/img_index/bg_master_data.csv")
     img_index_metadata = load_and_index_images(image_folder="src/img_index/smartcart_images", csv_metadata=csv_metadata)
     sim = Similarity(external_metadata=img_index_metadata)
-    uvicorn.run(app, host='0.0.0.0', port=9999)
+    #write_video_from_images()
+    #cleanup_folder()
+    uvicorn.run("src.api:app", host='0.0.0.0', port=9999, reload=True)
+
