@@ -1,5 +1,6 @@
+import base64
 from fastapi import BackgroundTasks, FastAPI, UploadFile, File
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from tempfile import NamedTemporaryFile
 import aiofiles
@@ -18,6 +19,10 @@ from vector_index import load_and_index_images, load_metadata
 from fast_segmentation import FastSegment
 
 model = FastSegment()
+csv_metadata = load_metadata("src/img_index/bg_master_data.csv")
+img_index_metadata = load_and_index_images(image_folder="src/img_index/smartcart_images", csv_metadata=csv_metadata)
+sim = Similarity(external_metadata=img_index_metadata)
+
 
 def create_application() -> FastAPI:
     application = FastAPI()
@@ -155,12 +160,49 @@ async def add_image(background_tasks: BackgroundTasks, file: UploadFile = File(.
     # round up to 2 precison points
     boxes = np.around(boxes,2).tolist()
 
-    response = {
-        "masks": masks,
-        "boxes": boxes
-    }
+    boxes_serialized = {"boxes": []};
+    #encoded_image = base64.b64encode(await file.read())
+    # file = await file.read()
+    #nparr = np.frombuffer(file, np.uint8)
+    # Convert the NumPy array into an OpenCV image
+    #decoded_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    return boxes
+    decoded_image = np.array(image)
+
+    for box in boxes:
+        img = decoded_image[int(box[1]) : int(box[3]), int(box[0]) : int(box[2])]
+        scores, search_results = sim.get_neighbors(img)
+        score = scores[0:1][0]
+        #search_results = search_index(img)
+
+        if search_results:
+            if score < 25:
+            #metadata = search_results["additional_info"]
+                item_name = os.path.basename(search_results["image_path"][0])
+
+                boxes_serialized["boxes"].append(
+                    {
+                        "item_name": item_name.split('.')[0], # remove .jpg from output
+                        "score": float(score),
+                        "x1": box[0],
+                        "y1": box[1],
+                        "x2": box[2],
+                        "y2": box[3],
+                    }
+                )
+        else:
+            boxes_serialized["boxes"].append(
+                {
+                    "item_name": "no item found",
+                    "score": 0,
+                    "x1": 0,
+                    "y1": 0,
+                    "x2": 0,
+                    "y2": 0,
+                }
+            )
+
+    return boxes_serialized
 
 @app.get("/play_video")
 async def video_endpoint():
@@ -199,10 +241,8 @@ async def add_image(file: UploadFile = File(...), metadata: dict = None):
 
 
 if __name__ == "__main__":
-    csv_metadata = load_metadata("src/img_index/bg_master_data.csv")
-    img_index_metadata = load_and_index_images(image_folder="src/img_index/smartcart_images", csv_metadata=csv_metadata)
-    sim = Similarity(external_metadata=img_index_metadata)
+    
     #write_video_from_images()
-    #cleanup_folder()
+    #cleanup_folder() 
     uvicorn.run("src.api:app", host='0.0.0.0', port=9999, reload=True)
 

@@ -84,7 +84,7 @@ class Similarity:
             lambda example, idx: {
                 "embeddings": self.extract_embeddings(example["image"]),
                 "image_path": self.external_metadata[idx]["image_path"],
-                "additional_info": self.external_metadata[idx]["additional_info"],
+                #"additional_info": self.external_metadata[idx]["additional_info"],
             },
             with_indices=True
         )
