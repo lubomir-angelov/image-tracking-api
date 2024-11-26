@@ -22,7 +22,7 @@ def load_and_index_images(image_folder: str, csv_metadata: dict) -> List:
             metadata.append({
                 "object_name": object_name,
                 "image_path": img_path,
-                #"additional_info": csv_metadata[int(object_name)]
+                "additional_info": csv_metadata[int(object_name)]
             })
     
     return metadata

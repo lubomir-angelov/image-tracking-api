@@ -20,8 +20,8 @@ from fast_segmentation import FastSegment
 
 model = FastSegment()
 csv_metadata = load_metadata("src/img_index/bg_master_data.csv")
-img_index_metadata = load_and_index_images(image_folder="src/img_index/smartcart_images", csv_metadata=csv_metadata)
-sim = Similarity(external_metadata=img_index_metadata)
+#img_index_metadata = load_and_index_images(image_folder="src/img_index/smartcart_images", csv_metadata=csv_metadata)
+#sim = Similarity(external_metadata=img_index_metadata)
 
 
 def create_application() -> FastAPI:
